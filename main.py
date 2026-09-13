@@ -9,21 +9,20 @@ import requests
 import streamlit as st
 
 st.set_page_config(
-    page_title="어제의 박스오피스", page_icon="🎬", layout="wide"
+    page_title="박스오피스 조회", page_icon="🎬", layout="wide"
 )
 
 
-def get_yesterday_kst():
+def get_yesterday_date_kst():
     kst = zoneinfo.ZoneInfo("Asia/Seoul")
     now_kst = datetime.now(kst)
-    yesterday_kst = now_kst - timedelta(days=1)
-    return yesterday_kst.strftime("%Y%m%d")
+    return (now_kst - timedelta(days=1)).date()
 
 
 @st.cache_data(ttl=3600)
-def fetch_daily_boxoffice(api_key, target_date):
+def fetch_daily_boxoffice(api_key, target_date_str):
     url = "https://www.kobis.or.kr/kobisopenapi/webservice/rest/boxoffice/searchDailyBoxOfficeList.json"
-    params = {"key": api_key, "targetDt": target_date}
+    params = {"key": api_key, "targetDt": target_date_str}
 
     try:
         response = requests.get(url, params=params, timeout=10)
@@ -34,7 +33,7 @@ def fetch_daily_boxoffice(api_key, target_date):
         return None, str(e)
 
 
-st.title("🎬 어제의 박스오피스 순위")
+st.title("🎬 박스오피스 순위 조회")
 
 if "KOBIS_KEY" not in st.secrets:
     st.error(
@@ -43,14 +42,19 @@ if "KOBIS_KEY" not in st.secrets:
     st.stop()
 
 api_key = st.secrets["KOBIS_KEY"]
-yesterday_str = get_yesterday_kst()
+max_selectable_date = get_yesterday_date_kst()
 
-formatted_date = datetime.strptime(yesterday_str, "%Y%m%d").strftime(
-    "%Y년 %m월 %d일"
+selected_date = st.date_input(
+    "조회할 날짜를 선택하세요",
+    value=max_selectable_date,
+    max_value=max_selectable_date,
 )
-st.write(f" 기준 일자: **{formatted_date}** (한국 시간 기준 어제)")
 
-data, error_msg = fetch_daily_boxoffice(api_key, yesterday_str)
+target_date_str = selected_date.strftime("%Y%m%d")
+formatted_date = selected_date.strftime("%Y년 %m월 %d일")
+st.write(f" 기준 일자: **{formatted_date}**")
+
+data, error_msg = fetch_daily_boxoffice(api_key, target_date_str)
 
 box_office_result = data.get("boxOfficeResult", {}) if data else {}
 daily_list = box_office_result.get("dailyBoxOfficeList", [])
@@ -66,9 +70,7 @@ if error_msg or fault_info or not daily_list:
     elif error_msg:
         st.error(f"🌐 통신 오류: {error_msg}")
     elif not daily_list:
-        st.info(
-            "📭 해당 날짜의 박스오피스 데이터가 비어 있습니다. 집계 중이거나 KOBIS 점검 시간일 수 있습니다."
-        )
+        st.info("📭 그날은 아직 집계 전입니다.")
 
     st.markdown("""
     ---
@@ -81,15 +83,33 @@ if error_msg or fault_info or not daily_list:
 
 df = pd.DataFrame(daily_list)
 
-numeric_cols = ["rank", "audiCnt", "audiAcc", "scrnCnt"]
+numeric_cols = ["rank", "rankInten", "audiCnt", "audiAcc", "scrnCnt"]
 for col in numeric_cols:
     df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0).astype(int)
 
 df = df.sort_values("rank").reset_index(drop=True)
 
+
+def format_rank_change(val):
+    if val > 0:
+        return f"🔺 {val}"
+    elif val < 0:
+        return f"🔹 {abs(val)}"
+    else:
+        return "-"
+
+
+df["순위 변동"] = df["rankInten"].apply(format_rank_change)
+df["display_movieNm"] = df.apply(
+    lambda row: f"🏆 {row['movieNm']}"
+    if row["audiAcc"] >= 1_000_000
+    else row["movieNm"],
+    axis=1,
+)
+
 top_movie = df.iloc[0]
 
-st.subheader(f"🏆 1위: {top_movie['movieNm']}")
+st.subheader(f"🏆 1위: {top_movie['display_movieNm']}")
 col1, col2, col3 = st.columns(3)
 
 with col1:
@@ -119,10 +139,19 @@ st.divider()
 st.subheader("📋 전체 순위 목록")
 
 display_df = df[
-    ["rank", "movieNm", "openDt", "audiCnt", "audiAcc", "scrnCnt"]
+    [
+        "rank",
+        "순위 변동",
+        "display_movieNm",
+        "openDt",
+        "audiCnt",
+        "audiAcc",
+        "scrnCnt",
+    ]
 ].copy()
 display_df.columns = [
     "순위",
+    "순위 변동",
     "영화명",
     "개봉일",
     "일별 관객수",

@@ -168,8 +168,14 @@ st.dataframe(
 )
 
 import pandas as pd
-import plotly.express as px
 import streamlit as st
+
+try:
+  import plotly.express as px
+
+  HAS_PLOTLY = True
+except ImportError:
+  HAS_PLOTLY = False
 
 st.set_page_config(
     page_title="영화 박스오피스 분석 데이터 Dashboard", page_icon="🎬", layout="wide"
@@ -203,21 +209,27 @@ movie_df = df[df["영화명"] == selected_movie]
 
 st.header("1. 일별 관객수 변화 추이")
 
-fig = px.line(
-    movie_df,
-    x="기준일자",
-    y="해당일관객수",
-    title=f"<{selected_movie}> 일별 관객수 추이",
-    labels={"기준일자": "날짜", "해당일관객수": "해당일 관객수(명)"},
-    markers=True,
-)
-
-fig.update_traces(
-    line_color="#FF4B4B", hovertemplate="%{x|%Y-%m-%d}<br>관객수: %{y:,}명"
-)
-fig.update_layout(hovermode="x unified")
-
-st.plotly_chart(fig, use_container_width=True)
+if HAS_PLOTLY:
+  fig = px.line(
+      movie_df,
+      x="기준일자",
+      y="해당일관객수",
+      title=f"<{selected_movie}> 일별 관객수 추이",
+      labels={"기준일자": "날짜", "해당일관객수": "해당일 관객수(명)"},
+      markers=True,
+  )
+  fig.update_traces(
+      line_color="#FF4B4B", hovertemplate="%{x|%Y-%m-%d}<br>관객수: %{y:,}명"
+  )
+  fig.update_layout(hovermode="x unified")
+  st.plotly_chart(fig, use_container_width=True)
+else:
+  st.warning(
+      "⚠️ `plotly` 라이브러리를 불러올 수 없어 기본 차트로 출력합니다."
+      " `requirements.txt` 설정을 확인해 주세요."
+  )
+  chart_df = movie_df.set_index("기준일자")[["해당일관객수"]]
+  st.line_chart(chart_df)
 
 st.info(
     f"💡 **이 그래프로 알 수 있는 것:** {selected_movie}의 개봉 후 날짜별 관객수 증감"

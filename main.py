@@ -166,3 +166,87 @@ st.dataframe(
     use_container_width=True,
     hide_index=True,
 )
+
+import pandas as pd
+import plotly.express as px
+import streamlit as st
+
+# 페이지 기본 설정 (웹 브라우저 탭 제목 및 레이아웃 설정)
+st.set_page_config(
+    page_title="영화 박스오피스 분석 데이터 Dashboard", page_icon="🎬", layout="wide"
+)
+
+
+# [1. 데이터 불러오기 및 캐싱]
+# @st.cache_data 데코레이터를 사용하여 데이터를 한 번만 로드하고 재사용합니다.
+# 앱이 재실행되어도 매번 데이터를 새로 다운로드하지 않아 속도가 훨씬 빠릅니다.
+@st.cache_data
+def load_data():
+  url = "https://raw.githubusercontent.com/keep-growing-park/data-science/refs/heads/main/dataset/kobis_1year_boxoffice.csv"
+  df = pd.read_csv(url)
+
+  # [2. 날짜 전처리 및 정렬]
+  # 1. 결측치(비어있는 값)가 하나라도 포함된 행 제거
+  df = df.dropna()
+
+  # 2. '기준일자' 컬럼을 datetime(날짜/시간) 형식으로 변환
+  df["기준일자"] = pd.to_datetime(df["기준일자"])
+
+  # 3. 전체 데이터를 '기준일자' 오름차순으로 정렬
+  df = df.sort_values(by="기준일자").reset_index(drop=True)
+
+  return df
+
+
+# 데이터 로드 실행
+df = load_data()
+
+# 앱 상단 제목 출력
+st.title("🎬 1개년 박스오피스 영화 관객수 분석 앱")
+st.markdown("---")
+
+# [3. 영화 선택 기능]
+# '영화명'별 최고 '누적관객수'를 기준으로 영화 목록을 내림차순 정렬합니다.
+movie_max_audi = df.groupby("영화명")["누적관객수"].max().sort_values(ascending=False)
+movie_list = movie_max_audi.index.tolist()
+
+# 사이드바에 영화 선택 드롭다운(selectbox) 생성
+st.sidebar.header("📌 옵션 선택")
+selected_movie = st.sidebar.selectbox(
+    "관람 추이를 확인할 영화를 선택하세요:", movie_list
+)
+
+# 선택한 영화의 데이터만 필터링
+movie_df = df[df["영화명"] == selected_movie]
+
+# [4. 선그래프 및 섹션 구성]
+# 앞으로 그래프를 더 추가할 예정이므로 구역(Section)을 명확하게 분리합니다.
+st.header("1. 일별 관객수 변화 추이")
+
+# Plotly 선 그래프 생성 (x축: 기준일자, y축: 해당일관객수)
+fig = px.line(
+    movie_df,
+    x="기준일자",
+    y="해당일관객수",
+    title=f"<{selected_movie}> 일별 관객수 추이",
+    labels={"기준일자": "날짜", "해당일관객수": "해당일 관객수(명)"},
+    markers=True,  # 데이터 지점에 점 표시
+)
+
+# 그래프 레이아웃 커스텀 (가독성 개선)
+fig.update_traces(
+    line_color="#FF4B4B", hovertemplate="%{x|%Y-%m-%d}<br>관객수: %{y:,}명"
+)
+fig.update_layout(hovermode="x unified")
+
+# Streamlit 화면에 Plotly 그래프 표시
+st.plotly_chart(fig, use_container_width=True)
+
+# [5. 그래프 해설 문구 자리]
+# 그래프 아래에 '이 그래프로 알 수 있는 것' 안내 텍스트 영역 배치
+st.info(
+    f"💡 **이 그래프로 알 수 있는 것:** {selected_movie}의 개봉 후 날짜별 관객수 증감"
+    " 변화 추이와 관객수가 가장 많이 몰린 피크(Peak) 시점을 확인할 수 있습니다."
+)
+
+st.markdown("---")

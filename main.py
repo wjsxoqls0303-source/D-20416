@@ -264,6 +264,12 @@ st.info(
 
 st.markdown("---")
 
+
+    chart_df3 = top5_df.pivot(
+        index="기준일자", columns="영화명", values="누적관객수"
+    )
+    st.line_chart(chart_df3)
+
 import pandas as pd
 import streamlit as st
 
@@ -299,7 +305,7 @@ movie_list = movie_max_audi.index.tolist()
 
 st.sidebar.header("📌 옵션 선택")
 selected_movie = st.sidebar.selectbox(
-    "관람 추이를 확인할 영화를 선택하세요:", movie_list, key="movie_select_box"
+    "관람 추이를 확인할 영화를 선택하세요:", movie_list, key="single_movie_select"
 )
 
 movie_df = df[df["영화명"] == selected_movie]

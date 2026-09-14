@@ -167,8 +167,6 @@ st.dataframe(
     hide_index=True,
 )
 
-------------------------
-
 import pandas as pd
 import streamlit as st
 

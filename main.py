@@ -270,6 +270,32 @@ st.markdown("---")
     )
     st.line_chart(chart_df3)
 
+st.header("2. 누적 관객수 변화 추이")
+
+if HAS_PLOTLY:
+    fig2 = px.area(
+        movie_df,
+        x="기준일자",
+        y="누적관객수",
+        title=f"<{selected_movie}> 누적 관객수 추이",
+        labels={"기준일자": "날짜", "누적관객수": "누적 관객수(명)"},
+    )
+    fig2.update_traces(
+        line_color="#2E86C1", hovertemplate="%{x|%Y-%m-%d}<br>누적 관객수: %{y:,}명"
+    )
+    fig2.update_layout(hovermode="x unified")
+    st.plotly_chart(fig2, use_container_width=True)
+else:
+    chart_df2 = movie_df.set_index("기준일자")[["누적관객수"]]
+    st.area_chart(chart_df2)
+
+st.info(
+    f"💡 **이 그래프로 알 수 있는 것:** 시간 경과에 따른 {selected_movie}의 총 누적 관객수"
+    " 누적 완만도 및 흥행 정체/상승 구간을 한눈에 알 수 있습니다."
+)
+
+st.markdown("---")
+
 import pandas as pd
 import streamlit as st
 

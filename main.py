@@ -167,82 +167,14 @@ st.dataframe(
     hide_index=True,
 )
 
-import pandas as pd
-import streamlit as st
-
-try:
-  import plotly.express as px
-
-  HAS_PLOTLY = True
-except ImportError:
-  HAS_PLOTLY = False
-
-st.set_page_config(
-    page_title="영화 박스오피스 분석 데이터 Dashboard", page_icon="🎬", layout="wide"
-)
-
-
-@st.cache_data
-def load_data():
-  url = "https://raw.githubusercontent.com/keep-growing-park/data-science/refs/heads/main/dataset/kobis_1year_boxoffice.csv"
-  df = pd.read_csv(url)
-  df = df.dropna()
-  df["기준일자"] = pd.to_datetime(df["기준일자"])
-  df = df.sort_values(by="기준일자").reset_index(drop=True)
-  return df
-
-
-df = load_data()
-
-st.title("🎬 1개년 박스오피스 영화 관객수 분석 앱")
-st.markdown("---")
-
-movie_max_audi = df.groupby("영화명")["누적관객수"].max().sort_values(ascending=False)
-movie_list = movie_max_audi.index.tolist()
-
-st.sidebar.header("📌 옵션 선택")
-selected_movie = st.sidebar.selectbox(
-    "관람 추이를 확인할 영화를 선택하세요:", movie_list
-)
-
-movie_df = df[df["영화명"] == selected_movie]
-
-st.header("1. 일별 관객수 변화 추이")
-
-if HAS_PLOTLY:
-  fig = px.line(
-      movie_df,
-      x="기준일자",
-      y="해당일관객수",
-      title=f"<{selected_movie}> 일별 관객수 추이",
-      labels={"기준일자": "날짜", "해당일관객수": "해당일 관객수(명)"},
-      markers=True,
-  )
-  fig.update_traces(
-      line_color="#FF4B4B", hovertemplate="%{x|%Y-%m-%d}<br>관객수: %{y:,}명"
-  )
-  fig.update_layout(hovermode="x unified")
-  st.plotly_chart(fig, use_container_width=True)
-else:
-  st.warning(
-      "⚠️ `plotly` 라이브러리를 불러올 수 없어 기본 차트로 출력합니다."
-      " `requirements.txt` 설정을 확인해 주세요."
-  )
-  chart_df = movie_df.set_index("기준일자")[["해당일관객수"]]
-  st.line_chart(chart_df)
-
-st.info(
-    f"💡 **이 그래프로 알 수 있는 것:** {selected_movie}의 개봉 후 날짜별 관객수 증감"
-    " 변화 추이와 관객수가 가장 많이 몰린 피크(Peak) 시점을 확인할 수 있습니다."
-)
-
-st.markdown("---")
+------------------------
 
 import pandas as pd
 import streamlit as st
 
 try:
     import plotly.express as px
+
     HAS_PLOTLY = True
 except ImportError:
     HAS_PLOTLY = False
@@ -272,7 +204,7 @@ movie_list = movie_max_audi.index.tolist()
 
 st.sidebar.header("📌 옵션 선택")
 selected_movie = st.sidebar.selectbox(
-    "관람 추이를 확인할 영화를 선택하세요:", movie_list
+    "관람 추이를 확인할 영화를 선택하세요:", movie_list, key="movie_select_box"
 )
 
 movie_df = df[df["영화명"] == selected_movie]

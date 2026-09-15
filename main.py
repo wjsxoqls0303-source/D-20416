@@ -294,7 +294,6 @@ else:
     if HAS_PLOTLY:
         fig4 = go.Figure()
 
-        # 원본 선 (연한 색상)
         fig4.add_trace(
             go.Scatter(
                 x=daily_top10_sum["기준일자"],
@@ -306,7 +305,6 @@ else:
             )
         )
 
-        # 이동평균 선 (진한 색상)
         fig4.add_trace(
             go.Scatter(
                 x=daily_top10_sum["기준일자"],
@@ -333,5 +331,104 @@ else:
 
     st.info(
         "💡 **이 그래프로 알 수 있는 것:** 주말과 평일 간의 반복적인 단기 관객수 변동을 보정하여, 전체 극장가 박스오피스 시장의 거시적인 성수기·비수기 흐름과 추세 전환점을 직관적으로 파악할 수 있습니다."
+    )
+    st.markdown("---")
+
+    # 5. 월별 전체 관객수 합계 추이 (막대그래프)
+    st.header("5. 월별 전체 관객수 합계 추이")
+
+    daily_top10_sum["연월"] = daily_top10_sum["기준일자"].dt.strftime("%Y-%m")
+    monthly_sum = (
+        daily_top10_sum.groupby("연월")["해당일관객수"].sum().reset_index()
+    )
+
+    if HAS_PLOTLY:
+        fig5 = px.bar(
+            monthly_sum,
+            x="연월",
+            y="해당일관객수",
+            title="월별 극장가 전체 관객수 합계",
+            labels={"연월": "조회 월", "해당일관객수": "월간 총 관객수(명)"},
+            text_auto=",.0f",
+        )
+        fig5.update_traces(
+            marker_color="#27AE60",
+            hovertemplate="%{x}<br>월간 총 관객수: %{y:,}명",
+            textposition="outside",
+        )
+        st.plotly_chart(fig5, use_container_width=True)
+    else:
+        chart_df5 = monthly_sum.set_index("연월")[["해당일관객수"]]
+        st.bar_chart(chart_df5)
+
+    st.info(
+        "💡 **이 그래프로 알 수 있는 것:** 월 단위로 집계된 총 관객수를 통해 1년 중 극장가 이용객이 집중되는 최성수기 월과 비수기 월을 한눈에 비교 및 분석할 수 있습니다."
+    )
+    st.markdown("---")
+
+    # 6. 캘린더 히트맵 (월별/주차별 × 요일별 관객수 분포)
+    st.header("6. 요일 및 주차별 관객수 분포 (캘린더 히트맵)")
+
+    heatmap_df = daily_top10_sum.copy()
+    heatmap_df["요일명"] = heatmap_df["기준일자"].dt.day_name()
+    
+    # 요일 순서 지정 (월요일 ~ 일요일)
+    days_order = [
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday",
+        "Saturday",
+        "Sunday",
+    ]
+    days_ko = ["월요일", "화요일", "수요일", "목요일", "금요일", "토요일", "일요일"]
+    day_map = dict(zip(days_order, days_ko))
+
+    heatmap_df["요일"] = pd.Categorical(
+        heatmap_df["요일명"].map(day_map), categories=days_ko, ordered=True
+    )
+
+    # 연-월 주차 표시 (Y축 그룹화용)
+    heatmap_df["주차"] = (
+        heatmap_df["기준일자"].dt.strftime("%Y-%m")
+        + " "
+        + ((heatmap_df["기준일자"].dt.day - 1) // 7 + 1).astype(str)
+        + "주차"
+    )
+    heatmap_df["YYYY-MM-DD"] = heatmap_df["기준일자"].dt.strftime("%Y-%m-%d")
+
+    if HAS_PLOTLY:
+        fig6 = px.density_heatmap(
+            heatmap_df,
+            x="요일",
+            y="주차",
+            z="해당일관객수",
+            color_continuous_scale="Reds",
+            title="날짜별 관객수 히트맵 (월~일 순서)",
+            labels={
+                "요일": "요일",
+                "주차": "월 / 주차",
+                "해당일관객수": "관객수(명)",
+            },
+            custom_data=["YYYY-MM-DD"],
+        )
+
+        fig6.update_traces(
+            hovertemplate="<b>날짜: %{customdata[0]}</b><br>요일: %{x}<br>일관객수: %{z:,}명<extra></extra>"
+        )
+
+        fig6.update_layout(
+            xaxis_title="요일",
+            yaxis_title="월 / 주차",
+            yaxis=dict(autorange="reversed"),
+        )
+
+        st.plotly_chart(fig6, use_container_width=True)
+    else:
+        st.warning("⚠️ 캘린더 히트맵 출력을 위해 Plotly 라이브러리가 필요합니다.")
+
+    st.info(
+        "💡 **이 그래프로 알 수 있는 것:** 각 주차별 요일 간 관객수 집중 패턴을 히트맵의 색상 농도로 시각화하여, 특정 요일(주말 등)이나 공휴일이 포함된 특수 일자의 극장 관객 폭증을 직관적으로 확인할 수 있습니다."
     )
     st.markdown("---")

@@ -366,30 +366,18 @@ else:
     )
     st.markdown("---")
 
-    # 6. 캘린더 히트맵 (월별/주차별 × 요일별 관객수 분포)
+  # 6. 캘린더 히트맵 (월별/주차별 × 요일별 관객수 분포)
     st.header("6. 요일 및 주차별 관객수 분포 (캘린더 히트맵)")
 
     heatmap_df = daily_top10_sum.copy()
-    heatmap_df["요일명"] = heatmap_df["기준일자"].dt.day_name()
     
     # 요일 순서 지정 (월요일 ~ 일요일)
-    days_order = [
-        "Monday",
-        "Tuesday",
-        "Wednesday",
-        "Thursday",
-        "Friday",
-        "Saturday",
-        "Sunday",
-    ]
+    days_order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
     days_ko = ["월요일", "화요일", "수요일", "목요일", "금요일", "토요일", "일요일"]
     day_map = dict(zip(days_order, days_ko))
 
-    heatmap_df["요일"] = pd.Categorical(
-        heatmap_df["요일명"].map(day_map), categories=days_ko, ordered=True
-    )
-
-    # 연-월 주차 표시 (Y축 그룹화용)
+    # 요일 변환 및 YYYY-MM-DD 문자열 생성
+    heatmap_df["요일명"] = heatmap_df["기준일자"].dt.day_name().map(day_map)
     heatmap_df["주차"] = (
         heatmap_df["기준일자"].dt.strftime("%Y-%m")
         + " "
@@ -399,19 +387,22 @@ else:
     heatmap_df["YYYY-MM-DD"] = heatmap_df["기준일자"].dt.strftime("%Y-%m-%d")
 
     if HAS_PLOTLY:
+        # custom_data 대신 hover_data를 사용하여 TypeError 방지
         fig6 = px.density_heatmap(
             heatmap_df,
-            x="요일",
+            x="요일명",
             y="주차",
             z="해당일관객수",
             color_continuous_scale="Reds",
             title="날짜별 관객수 히트맵 (월~일 순서)",
             labels={
-                "요일": "요일",
+                "요일명": "요일",
                 "주차": "월 / 주차",
                 "해당일관객수": "관객수(명)",
+                "YYYY-MM-DD": "날짜"
             },
-            custom_data=["YYYY-MM-DD"],
+            category_orders={"요일명": days_ko}, # 요일 순서 강제 고정
+            hover_data={"YYYY-MM-DD": True}
         )
 
         fig6.update_traces(
@@ -427,8 +418,3 @@ else:
         st.plotly_chart(fig6, use_container_width=True)
     else:
         st.warning("⚠️ 캘린더 히트맵 출력을 위해 Plotly 라이브러리가 필요합니다.")
-
-    st.info(
-        "💡 **이 그래프로 알 수 있는 것:** 각 주차별 요일 간 관객수 집중 패턴을 히트맵의 색상 농도로 시각화하여, 특정 요일(주말 등)이나 공휴일이 포함된 특수 일자의 극장 관객 폭증을 직관적으로 확인할 수 있습니다."
-    )
-    st.markdown("---")

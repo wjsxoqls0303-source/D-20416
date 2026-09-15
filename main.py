@@ -12,7 +12,6 @@ try:
 except ImportError:
     HAS_PLOTLY = False
 
-# 1. 페이지 설정 (반드시 Script 최상단에서 1회만 실행)
 st.set_page_config(
     page_title="영화 박스오피스 통합 대시보드",
     page_icon="🎬",
@@ -20,7 +19,6 @@ st.set_page_config(
 )
 
 
-# --- [도우미 함수 및 데이터 로드] ---
 def get_yesterday_date_kst():
     kst = zoneinfo.ZoneInfo("Asia/Seoul")
     now_kst = datetime.now(kst)
@@ -58,7 +56,6 @@ def format_rank_change(val):
         return "-"
 
 
-# --- [사이드바 메뉴 구성] ---
 st.sidebar.title("📌 메뉴 선택")
 page = st.sidebar.radio(
     "원하는 분석 페이지를 선택하세요:",
@@ -68,9 +65,6 @@ page = st.sidebar.radio(
 st.sidebar.markdown("---")
 
 
-# ==========================================
-# PAGE 1: 일별 박스오피스 실시간 조회
-# ==========================================
 if page == "일별 박스오피스 실시간 조회":
     st.title("🎬 일별 박스오피스 순위 조회")
 
@@ -126,7 +120,6 @@ if page == "일별 박스오피스 실시간 조회":
         axis=1,
     )
 
-    # 1위 영화 지표 카드
     top_movie = df.iloc[0]
     st.subheader(f"🏆 1위: {top_movie['display_movieNm']}")
     col1, col2, col3 = st.columns(3)
@@ -136,7 +129,6 @@ if page == "일별 박스오피스 실시간 조회":
 
     st.divider()
 
-    # 차트 및 테이블
     st.subheader("📊 관객수 상위 5개 영화")
     top5_df = df.head(5).copy()
     chart_df = top5_df.set_index("movieNm")[["audiCnt"]]
@@ -176,9 +168,6 @@ if page == "일별 박스오피스 실시간 조회":
     )
 
 
-# ==========================================
-# PAGE 2: 1개년 박스오피스 추이 분석
-# ==========================================
 else:
     st.title("📈 1개년 박스오피스 영화 관객수 분석")
 
@@ -199,7 +188,6 @@ else:
 
     movie_df = df_hist[df_hist["영화명"] == selected_movie]
 
-    # 1. 일별 관객수 추이
     st.header("1. 일별 관객수 변화 추이")
     if HAS_PLOTLY:
         fig1 = px.line(
@@ -224,7 +212,6 @@ else:
     )
     st.markdown("---")
 
-    # 2. 누적 관객수 추이
     st.header("2. 누적 관객수 변화 추이")
     if HAS_PLOTLY:
         fig2 = px.area(
@@ -248,18 +235,29 @@ else:
     )
     st.markdown("---")
 
-    # 3. TOP 5 비교
-    st.header("3. 상위 5개 흥행 영화 누적 관객수 비교")
-    top5_movies = movie_max_audi.head(5).index.tolist()
-    top5_df = df_hist[df_hist["영화명"].isin(top5_movies)]
+    st.header("3. long-run 영화 (20일 이상 등장) TOP 5 누적 관객수 비교")
+
+    movie_days = df_hist.groupby("영화명")["기준일자"].nunique()
+    qualified_movies = movie_days[movie_days >= 20].index
+
+    top5_qualified_movies = (
+        df_hist[df_hist["영화명"].isin(qualified_movies)]
+        .groupby("영화명")["누적관객수"]
+        .max()
+        .sort_values(ascending=False)
+        .head(5)
+        .index.tolist()
+    )
+
+    top5_qualified_df = df_hist[df_hist["영화명"].isin(top5_qualified_movies)]
 
     if HAS_PLOTLY:
         fig3 = px.line(
-            top5_df,
+            top5_qualified_df,
             x="기준일자",
             y="누적관객수",
             color="영화명",
-            title="TOP 5 흥행 영화 누적 관객수 추이 비교",
+            title="TOP 10 20일 이상 진입 영화 중 흥행 TOP 5 누적 관객수 비교",
             labels={
                 "기준일자": "날짜",
                 "누적관객수": "누적 관객수(명)",
@@ -272,11 +270,12 @@ else:
         fig3.update_layout(hovermode="x unified")
         st.plotly_chart(fig3, use_container_width=True)
     else:
-        chart_df3 = top5_df.pivot(
+        chart_df3 = top5_qualified_df.pivot(
             index="기준일자", columns="영화명", values="누적관객수"
         )
         st.line_chart(chart_df3)
 
     st.info(
-        "💡 **분석 포인트:** 상위 5개 영화 간의 누적 관객수 증가 속도와 흥행 스코어 달성에 걸린 기간 차이를 시각적으로 비교합니다."
+        "💡 **이 그래프로 알 수 있는 것:** 단기 깜짝 흥행에 그치지 않고 20일 이상 장기 흥행(Long-run)을 이어간 최상위 영화들의 누적 관객수 가파름과 스코어 변화 양상을 비교해볼 수 있습니다."
     )
+    st.markdown("---")

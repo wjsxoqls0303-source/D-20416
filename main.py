@@ -7,6 +7,7 @@ import streamlit as st
 
 try:
     import plotly.express as px
+    import plotly.graph_objects as go
 
     HAS_PLOTLY = True
 except ImportError:
@@ -277,5 +278,60 @@ else:
 
     st.info(
         "💡 **이 그래프로 알 수 있는 것:** 단기 깜짝 흥행에 그치지 않고 20일 이상 장기 흥행(Long-run)을 이어간 최상위 영화들의 누적 관객수 가파름과 스코어 변화 양상을 비교해볼 수 있습니다."
+    )
+    st.markdown("---")
+
+    # 4. 전체 TOP 10 영화 관객수 7일 이동평균 추이
+    st.header("4. 전체 TOP 10 영화 관객수 7일 이동평균 추이")
+
+    daily_top10_sum = (
+        df_hist.groupby("기준일자")["해당일관객수"].sum().reset_index()
+    )
+    daily_top10_sum["7일_이동평균"] = (
+        daily_top10_sum["해당일관객수"].rolling(window=7, min_periods=1).mean()
+    )
+
+    if HAS_PLOTLY:
+        fig4 = go.Figure()
+
+        # 원본 선 (연한 색상)
+        fig4.add_trace(
+            go.Scatter(
+                x=daily_top10_sum["기준일자"],
+                y=daily_top10_sum["해당일관객수"],
+                mode="lines",
+                name="일별 총관객수 (원본)",
+                line=dict(color="rgba(255, 154, 162, 0.4)", width=1.5),
+                hovertemplate="%{x|%Y-%m-%d}<br>일별 관객수: %{y:,}명",
+            )
+        )
+
+        # 이동평균 선 (진한 색상)
+        fig4.add_trace(
+            go.Scatter(
+                x=daily_top10_sum["기준일자"],
+                y=daily_top10_sum["7일_이동평균"],
+                mode="lines",
+                name="7일 이동평균",
+                line=dict(color="#D90429", width=3),
+                hovertemplate="%{x|%Y-%m-%d}<br>7일 이동평균: %{y:,.0f}명",
+            )
+        )
+
+        fig4.update_layout(
+            title="일별 TOP 10 영화 총 관객수 및 7일 이동평균 추이",
+            xaxis_title="날짜",
+            yaxis_title="관객수(명)",
+            hovermode="x unified",
+        )
+        st.plotly_chart(fig4, use_container_width=True)
+    else:
+        chart_df4 = daily_top10_sum.set_index("기준일자")[
+            ["해당일관객수", "7일_이동평균"]
+        ]
+        st.line_chart(chart_df4)
+
+    st.info(
+        "💡 **이 그래프로 알 수 있는 것:** 주말과 평일 간의 반복적인 단기 관객수 변동을 보정하여, 전체 극장가 박스오피스 시장의 거시적인 성수기·비수기 흐름과 추세 전환점을 직관적으로 파악할 수 있습니다."
     )
     st.markdown("---")

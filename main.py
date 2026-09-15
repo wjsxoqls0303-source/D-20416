@@ -1,21 +1,46 @@
+import zoneinfo
+from datetime import datetime, timedelta
+
 import pandas as pd
+import requests
 import streamlit as st
 
 try:
     import plotly.express as px
-    import plotly.graph_objects as go
 
     HAS_PLOTLY = True
 except ImportError:
     HAS_PLOTLY = False
 
+# 1. 페이지 설정 (반드시 Script 최상단에서 1회만 실행)
 st.set_page_config(
-    page_title="영화 박스오피스 분석 데이터 Dashboard", page_icon="🎬", layout="wide"
+    page_title="영화 박스오피스 통합 대시보드",
+    page_icon="🎬",
+    layout="wide",
 )
 
 
+# --- [도우미 함수 및 데이터 로드] ---
+def get_yesterday_date_kst():
+    kst = zoneinfo.ZoneInfo("Asia/Seoul")
+    now_kst = datetime.now(kst)
+    return (now_kst - timedelta(days=1)).date()
+
+
+@st.cache_data(ttl=3600)
+def fetch_daily_boxoffice(api_key, target_date_str):
+    url = "https://www.kobis.or.kr/kobisopenapi/webservice/rest/boxoffice/searchDailyBoxOfficeList.json"
+    params = {"key": api_key, "targetDt": target_date_str}
+    try:
+        response = requests.get(url, params=params, timeout=10)
+        response.raise_for_status()
+        return response.json(), None
+    except Exception as e:
+        return None, str(e)
+
+
 @st.cache_data
-def load_data():
+def load_historical_data():
     url = "https://raw.githubusercontent.com/keep-growing-park/data-science/refs/heads/main/dataset/kobis_1year_boxoffice.csv"
     df = pd.read_csv(url)
     df = df.dropna()
@@ -24,153 +49,234 @@ def load_data():
     return df
 
 
-df = load_data()
+def format_rank_change(val):
+    if val > 0:
+        return f"🔺 {val}"
+    elif val < 0:
+        return f"🔹 {abs(val)}"
+    else:
+        return "-"
 
-st.title("🎬 1개년 박스오피스 영화 관객수 분석 앱")
-st.markdown("---")
 
-movie_max_audi = df.groupby("영화명")["누적관객수"].max().sort_values(ascending=False)
-top_1_movie = movie_max_audi.index[0]
-
-movie_df = df[df["영화명"] == top_1_movie]
-
-st.header(f"1. 최다 흥행작 ({top_1_movie}) 일별 관객수 변화 추이")
-
-if HAS_PLOTLY:
-    fig1 = px.line(
-        movie_df,
-        x="기준일자",
-        y="해당일관객수",
-        title=f"<{top_1_movie}> 일별 관객수 추이",
-        labels={"기준일자": "날짜", "해당일관객수": "해당일 관객수(명)"},
-        markers=True,
-    )
-    fig1.update_traces(
-        line_color="#FF4B4B", hovertemplate="%{x|%Y-%m-%d}<br>관객수: %{y:,}명"
-    )
-    fig1.update_layout(hovermode="x unified")
-    st.plotly_chart(fig1, use_container_width=True)
-else:
-    st.warning(
-        "⚠️ `plotly` 라이브러리를 불러올 수 없어 기본 차트로 출력합니다."
-        " `requirements.txt` 설정을 확인해 주세요."
-    )
-    chart_df1 = movie_df.set_index("기준일자")[["해당일관객수"]]
-    st.line_chart(chart_df1)
-
-st.info(
-    f"💡 **이 그래프로 알 수 있는 것:** 최다 흥행작 {top_1_movie}의 개봉 후 날짜별"
-    " 관객수 증감 변화 추이와 관객수가 가장 많이 몰린 피크(Peak) 시점을 확인할 수"
-    " 있습니다."
+# --- [사이드바 메뉴 구성] ---
+st.sidebar.title("📌 메뉴 선택")
+page = st.sidebar.radio(
+    "원하는 분석 페이지를 선택하세요:",
+    ["일별 박스오피스 실시간 조회", "1개년 박스오피스 추이 분석"],
 )
 
-st.markdown("---")
+st.sidebar.markdown("---")
 
-st.header(f"2. 최다 흥행작 ({top_1_movie}) 누적 관객수 변화 추이")
 
-if HAS_PLOTLY:
-    fig2 = px.area(
-        movie_df,
-        x="기준일자",
-        y="누적관객수",
-        title=f"<{top_1_movie}> 누적 관객수 추이",
-        labels={"기준일자": "날짜", "누적관객수": "누적 관객수(명)"},
-    )
-    fig2.update_traces(
-        line_color="#2E86C1", hovertemplate="%{x|%Y-%m-%d}<br>누적 관객수: %{y:,}명"
-    )
-    fig2.update_layout(hovermode="x unified")
-    st.plotly_chart(fig2, use_container_width=True)
-else:
-    chart_df2 = movie_df.set_index("기준일자")[["누적관객수"]]
-    st.area_chart(chart_df2)
+# ==========================================
+# PAGE 1: 일별 박스오피스 실시간 조회
+# ==========================================
+if page == "일별 박스오피스 실시간 조회":
+    st.title("🎬 일별 박스오피스 순위 조회")
 
-st.info(
-    f"💡 **이 그래프로 알 수 있는 것:** 시간 경과에 따른 {top_1_movie}의 총 누적 관객수"
-    " 누적 완만도 및 흥행 정체/상승 구간을 한눈에 알 수 있습니다."
-)
-
-st.markdown("---")
-
-st.header("3. 상위 5개 흥행 영화 누적 관객수 비교")
-
-top5_movies = movie_max_audi.head(5).index.tolist()
-top5_df = df[df["영화명"].isin(top5_movies)]
-
-if HAS_PLOTLY:
-    fig3 = px.line(
-        top5_df,
-        x="기준일자",
-        y="누적관객수",
-        color="영화명",
-        title="TOP 5 흥행 영화 누적 관객수 추이 비교",
-        labels={"기준일자": "날짜", "누적관객수": "누적 관객수(명)", "영화명": "영화 제목"},
-    )
-    fig3.update_traces(hovertemplate="%{x|%Y-%m-%d}<br>누적 관객수: %{y:,}명")
-    fig3.update_layout(hovermode="x unified")
-    st.plotly_chart(fig3, use_container_width=True)
-else:
-    chart_df3 = top5_df.pivot(
-        index="기준일자", columns="영화명", values="누적관객수"
-    )
-    st.line_chart(chart_df3)
-
-st.info(
-    "💡 **이 그래프로 알 수 있는 것:** 가장 흥행한 상위 5개 영화 간의 누적 관객수 증가"
-    " 속도 비교와 최종 흥행 스코어 달성에 걸린 기간 차이를 시각적으로 비교할 수 있습니다."
-)
-
-st.markdown("---")
-
-st.header("4. 전체 TOP 10 영화 관객수 7일 이동평균 추이")
-
-daily_top10_sum = df.groupby("기준일자")["해당일관객수"].sum().reset_index()
-daily_top10_sum["7일_이동평균"] = (
-    daily_top10_sum["해당일관객수"].rolling(window=7, min_periods=1).mean()
-)
-
-if HAS_PLOTLY:
-    fig4 = go.Figure()
-
-    fig4.add_trace(
-        go.Scatter(
-            x=daily_top10_sum["기준일자"],
-            y=daily_top10_sum["해당일관객수"],
-            mode="lines",
-            name="일별 총관객수 (원본)",
-            line=dict(color="rgba(255, 154, 162, 0.4)", width=1.5),
-            hovertemplate="%{x|%Y-%m-%d}<br>일별 관객수: %{y:,}명",
+    if "KOBIS_KEY" not in st.secrets:
+        st.error(
+            "❌ Streamlit Secrets에 `KOBIS_KEY`가 설정되지 않았습니다. Secrets 설정을 확인해 주세요."
         )
+        st.stop()
+
+    api_key = st.secrets["KOBIS_KEY"]
+    max_selectable_date = get_yesterday_date_kst()
+
+    selected_date = st.date_input(
+        "조회할 날짜를 선택하세요",
+        value=max_selectable_date,
+        max_value=max_selectable_date,
     )
 
-    fig4.add_trace(
-        go.Scatter(
-            x=daily_top10_sum["기준일자"],
-            y=daily_top10_sum["7일_이동평균"],
-            mode="lines",
-            name="7일 이동평균",
-            line=dict(color="#D90429", width=3),
-            hovertemplate="%{x|%Y-%m-%d}<br>7일 이동평균: %{y:,.0f}명",
+    target_date_str = selected_date.strftime("%Y%m%d")
+    formatted_date = selected_date.strftime("%Y년 %m월 %d일")
+    st.write(f"기준 일자: **{formatted_date}**")
+
+    data, error_msg = fetch_daily_boxoffice(api_key, target_date_str)
+    box_office_result = data.get("boxOfficeResult", {}) if data else {}
+    daily_list = box_office_result.get("dailyBoxOfficeList", [])
+    fault_info = data.get("faultInfo", None) if data else None
+
+    if error_msg or fault_info or not daily_list:
+        st.warning("⚠️ 데이터를 가져오지 못했습니다.")
+        if fault_info:
+            st.error(
+                f"🔑 API 인증 오류: {fault_info.get('message', '인증키가 유효하지 않습니다.')}"
+            )
+        elif error_msg:
+            st.error(f"🌐 통신 오류: {error_msg}")
+        elif not daily_list:
+            st.info("📭 해당 날짜의 박스오피스 데이터가 존재하지 않습니다.")
+        st.stop()
+
+    df = pd.DataFrame(daily_list)
+    numeric_cols = ["rank", "rankInten", "audiCnt", "audiAcc", "scrnCnt"]
+    for col in numeric_cols:
+        df[col] = (
+            pd.to_numeric(df[col], errors="coerce").fillna(0).astype(int)
         )
+
+    df = df.sort_values("rank").reset_index(drop=True)
+    df["순위 변동"] = df["rankInten"].apply(format_rank_change)
+    df["display_movieNm"] = df.apply(
+        lambda row: f"🏆 {row['movieNm']}"
+        if row["audiAcc"] >= 1_000_000
+        else row["movieNm"],
+        axis=1,
     )
 
-    fig4.update_layout(
-        title="일별 TOP 10 영화 총 관객수 및 7일 이동평균 추이",
-        xaxis_title="날짜",
-        yaxis_title="관객수(명)",
-        hovermode="x unified",
-    )
-    st.plotly_chart(fig4, use_container_width=True)
-else:
-    chart_df4 = daily_top10_sum.set_index("기준일자")[
-        ["해당일관객수", "7일_이동평균"]
+    # 1위 영화 지표 카드
+    top_movie = df.iloc[0]
+    st.subheader(f"🏆 1위: {top_movie['display_movieNm']}")
+    col1, col2, col3 = st.columns(3)
+    col1.metric("일별 관객수", f"{top_movie['audiCnt']:,} 명")
+    col2.metric("누적 관객수", f"{top_movie['audiAcc']:,} 명")
+    col3.metric("스크린수", f"{top_movie['scrnCnt']:,} 개")
+
+    st.divider()
+
+    # 차트 및 테이블
+    st.subheader("📊 관객수 상위 5개 영화")
+    top5_df = df.head(5).copy()
+    chart_df = top5_df.set_index("movieNm")[["audiCnt"]]
+    chart_df.columns = ["관객수"]
+    st.bar_chart(chart_df)
+
+    st.divider()
+
+    st.subheader("📋 전체 순위 목록")
+    display_df = df[
+        [
+            "rank",
+            "순위 변동",
+            "display_movieNm",
+            "openDt",
+            "audiCnt",
+            "audiAcc",
+            "scrnCnt",
+        ]
+    ].copy()
+    display_df.columns = [
+        "순위",
+        "순위 변동",
+        "영화명",
+        "개봉일",
+        "일별 관객수",
+        "누적 관객수",
+        "스크린수",
     ]
-    st.line_chart(chart_df4)
 
-st.info(
-    "💡 **이 그래프로 알 수 있는 것:** 주말/평일 반복에 따른 단기 변동성을 제거하여"
-    " 전체 극장가 박스오피스 시장의 거시적인 성수기/비수기 흐름과 흐름 전환점을 파악할 수"
-    " 있습니다."
-)
+    st.dataframe(
+        display_df.style.format(
+            {"일별 관객수": "{:,}", "누적 관객수": "{:,}", "스크린수": "{:,}"}
+        ),
+        use_container_width=True,
+        hide_index=True,
+    )
 
-st.markdown("---")
+
+# ==========================================
+# PAGE 2: 1개년 박스오피스 추이 분석
+# ==========================================
+else:
+    st.title("📈 1개년 박스오피스 영화 관객수 분석")
+
+    df_hist = load_historical_data()
+
+    movie_max_audi = (
+        df_hist.groupby("영화명")["누적관객수"]
+        .max()
+        .sort_values(ascending=False)
+    )
+    movie_list = movie_max_audi.index.tolist()
+
+    selected_movie = st.sidebar.selectbox(
+        "관람 추이를 확인할 영화를 선택하세요:",
+        movie_list,
+        key="hist_movie_select",
+    )
+
+    movie_df = df_hist[df_hist["영화명"] == selected_movie]
+
+    # 1. 일별 관객수 추이
+    st.header("1. 일별 관객수 변화 추이")
+    if HAS_PLOTLY:
+        fig1 = px.line(
+            movie_df,
+            x="기준일자",
+            y="해당일관객수",
+            title=f"<{selected_movie}> 일별 관객수 추이",
+            labels={"기준일자": "날짜", "해당일관객수": "해당일 관객수(명)"},
+            markers=True,
+        )
+        fig1.update_traces(
+            line_color="#FF4B4B",
+            hovertemplate="%{x|%Y-%m-%d}<br>관객수: %{y:,}명",
+        )
+        fig1.update_layout(hovermode="x unified")
+        st.plotly_chart(fig1, use_container_width=True)
+    else:
+        st.line_chart(movie_df.set_index("기준일자")[["해당일관객수"]])
+
+    st.info(
+        f"💡 **분석 포인트:** {selected_movie}의 개봉 후 날짜별 관객수 증감 변화 추이와 관객수가 가장 많이 몰린 피크(Peak) 시점을 확인할 수 있습니다."
+    )
+    st.markdown("---")
+
+    # 2. 누적 관객수 추이
+    st.header("2. 누적 관객수 변화 추이")
+    if HAS_PLOTLY:
+        fig2 = px.area(
+            movie_df,
+            x="기준일자",
+            y="누적관객수",
+            title=f"<{selected_movie}> 누적 관객수 추이",
+            labels={"기준일자": "날짜", "누적관객수": "누적 관객수(명)"},
+        )
+        fig2.update_traces(
+            line_color="#2E86C1",
+            hovertemplate="%{x|%Y-%m-%d}<br>누적 관객수: %{y:,}명",
+        )
+        fig2.update_layout(hovermode="x unified")
+        st.plotly_chart(fig2, use_container_width=True)
+    else:
+        st.area_chart(movie_df.set_index("기준일자")[["누적관객수"]])
+
+    st.info(
+        f"💡 **분석 포인트:** 시간 경과에 따른 {selected_movie}의 총 누적 관객수 증가 곡선과 흥행 정체/상승 구간을 파악할 수 있습니다."
+    )
+    st.markdown("---")
+
+    # 3. TOP 5 비교
+    st.header("3. 상위 5개 흥행 영화 누적 관객수 비교")
+    top5_movies = movie_max_audi.head(5).index.tolist()
+    top5_df = df_hist[df_hist["영화명"].isin(top5_movies)]
+
+    if HAS_PLOTLY:
+        fig3 = px.line(
+            top5_df,
+            x="기준일자",
+            y="누적관객수",
+            color="영화명",
+            title="TOP 5 흥행 영화 누적 관객수 추이 비교",
+            labels={
+                "기준일자": "날짜",
+                "누적관객수": "누적 관객수(명)",
+                "영화명": "영화 제목",
+            },
+        )
+        fig3.update_traces(
+            hovertemplate="%{x|%Y-%m-%d}<br>누적 관객수: %{y:,}명"
+        )
+        fig3.update_layout(hovermode="x unified")
+        st.plotly_chart(fig3, use_container_width=True)
+    else:
+        chart_df3 = top5_df.pivot(
+            index="기준일자", columns="영화명", values="누적관객수"
+        )
+        st.line_chart(chart_df3)
+
+    st.info(
+        "💡 **분석 포인트:** 상위 5개 영화 간의 누적 관객수 증가 속도와 흥행 스코어 달성에 걸린 기간 차이를 시각적으로 비교합니다."
+    )

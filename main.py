@@ -174,35 +174,3 @@ st.info(
 )
 
 st.markdown("---")
-
-st.header("5. 월별 전체 관객수 합계 추이")
-
-daily_top10_sum["연월"] = daily_top10_sum["기준일자"].dt.strftime("%Y-%m")
-monthly_sum = daily_top10_sum.groupby("연월")["해당일관객수"].sum().reset_index()
-
-if HAS_PLOTLY:
-    fig5 = px.bar(
-        monthly_sum,
-        x="연월",
-        y="해당일관객수",
-        title="월별 극장가 전체 관객수 합계",
-        labels={"연월": "조회 월", "해당일관객수": "월간 총 관객수(명)"},
-        text_auto=",.0f",
-    )
-    fig5.update_traces(
-        marker_color="#27AE60",
-        hovertemplate="%{x}<br>월간 총 관객수: %{y:,}명",
-        textposition="outside",
-    )
-    st.plotly_chart(fig5, use_container_width=True)
-else:
-    chart_df5 = monthly_sum.set_index("연월")[["해당일관객수"]]
-    st.bar_chart(chart_df5)
-
-st.info(
-    "💡 **이 그래프로 알 수 있는 것:** 월 단위 총 관객수를 집계하여 1년 중"
-    " 영화관 방문객이 가장 많은 최성수기 월과 비수기 월을 직관적으로 비교·파악할 수"
-    " 있습니다."
-)
-
-st.markdown("---")

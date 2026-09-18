@@ -507,3 +507,42 @@ st.info(
 )
 
 st.markdown("---")
+
+st.header("3. 총 관객 수 분포 (히스토그램)")
+
+# 히스토그램 생성
+fig3 = px.histogram(
+    df,
+    x="total_audi",
+    nbins=30,
+    title="영화별 총 관객 수 분포",
+    labels={"total_audi": "총 관객 수(명)", "count": "영화 수"},
+    color_discrete_sequence=["#3366CC"],
+)
+
+fig3.update_traces(
+    hovertemplate="관객 수 구간: %{x}<br>영화 수: %{y}편<extra></extra>"
+)
+
+fig3.update_layout(
+    xaxis_title="총 관객 수(명)",
+    yaxis_title="영화 수(편)",
+    bargap=0.1,
+)
+
+st.plotly_chart(fig3, use_container_width=True)
+
+# 관객 수 최다 영화 계산
+max_movie = df.loc[df["total_audi"].idxmax()]
+max_movie_name = max_movie["movieNm"]
+max_movie_audi = max_movie["total_audi"]
+
+# 100만 명 이하 영화 비율 계산
+under_1M_count = (df["total_audi"] <= 1_000_000).sum()
+under_1M_ratio = (under_1M_count / len(df)) * 100
+
+st.info(
+    f"💡 **이 그래프로 알 수 있는 것:** 대부분의 영화({under_1M_ratio:.1f}%)가 관객 수 **100만 명 이하 구간**에 밀집해 있는 반면, 가장 많은 관객을 모은 영화는 **'{max_movie_name}'**({max_movie_audi:,}명)으로 흥행 편차가 매우 큼을 알 수 있습니다."
+)
+
+st.markdown("---")

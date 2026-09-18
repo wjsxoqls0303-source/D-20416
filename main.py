@@ -433,7 +433,6 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-# 페이지 기본 설정
 st.set_page_config(
     page_title="영화 데이터 그래프 도감 2 - 분포와 관계",
     page_icon="🎬",
@@ -441,50 +440,37 @@ st.set_page_config(
 )
 
 
-# 데이터 로드 및 전처리 함수
 @st.cache_data
 def load_data():
     url = "https://raw.githubusercontent.com/greatsong/modudata/main/data/kobis_movies.csv"
     df = pd.read_csv(url)
 
-    # 개봉일(openDt)을 문자열 변환 후 datetime 타입으로 변환
     df["openDt"] = pd.to_datetime(
         df["openDt"].astype(str), format="%Y%m%d", errors="coerce"
     )
-
-    # 장르(genre)가 여러 개(예: '액션|드라마')인 경우 첫 번째 장르만 추출 (.str 사용)
     df["genre"] = df["genre"].fillna("미정").astype(str).str.split("|").str[0]
 
     return df
 
 
-# 데이터 불러오기
 df = load_data()
 
-# 앱 메인 타이틀
 st.title("🎬 영화 데이터 그래프 도감 2 - 분포와 관계")
 st.markdown("---")
 
-
-# -------------------------------------------------------------------
-# 그래프 1: 장르별 영화 편수 (도넛 차트)
-# -------------------------------------------------------------------
 st.header("1. 장르별 영화 편수 분포")
 
-# 장르별 영화 편수 집계
 genre_counts = df["genre"].value_counts().reset_index()
 genre_counts.columns = ["장르", "편수"]
 
-# Plotly 도넛 차트 생성
 fig1 = px.pie(
     genre_counts,
     names="장르",
     values="편수",
     title="장르별 영화 편수 비율",
-    hole=0.4,  # 도넛 형태 지정
+    hole=0.4,
 )
 
-# 마우스 호버 시 편수 및 비율 표기 지정
 fig1.update_traces(
     hovertemplate="<b>장르: %{label}</b><br>영화 편수: %{value}편<br>비율: %{percent}<extra></extra>",
     textinfo="percent+label",
@@ -492,40 +478,30 @@ fig1.update_traces(
 
 fig1.update_layout(hovermode="closest")
 
-# Streamlit 화면에 차트 출력
 st.plotly_chart(fig1, use_container_width=True)
 
-# '이 그래프로 알 수 있는 것' 안내 섹션
 st.info(
     "💡 **이 그래프로 알 수 있는 것:** 최근 1년간 박스오피스 상위권에 들어간 주요 영화들의 장르별 편수 비중을 파악하여, 어떤 장르가 시장을 주도하고 있는지 한눈에 확인할 수 있습니다."
 )
 
 st.markdown("---")
 
-
-# -------------------------------------------------------------------
-# 그래프 2: 장르 및 영화별 총 관객 수 분포 (트리맵)
-# -------------------------------------------------------------------
 st.header("2. 장르 및 영화별 총 관객 수 분포 (트리맵)")
 
-# Plotly 트리맵 생성 (장르 -> 영화명 계층 구조, 면적: total_audi)
 fig2 = px.treemap(
     df,
     path=[px.Constant("전체 영화"), "genre", "movieNm"],
     values="total_audi",
     title="장르 및 영화별 총 관객 수 비중",
-    color="genre",  # 장르별 색상 구별
+    color="genre",
 )
 
-# 마우스 호버 시 영화명과 총 관객 수 표기 지정
 fig2.update_traces(
     hovertemplate="<b>%{label}</b><br>총 관객 수: %{value:,}명<extra></extra>"
 )
 
-# Streamlit 화면에 차트 출력
 st.plotly_chart(fig2, use_container_width=True)
 
-# '이 그래프로 알 수 있는 것' 안내 섹션
 st.info(
     "💡 **이 그래프로 알 수 있는 것:** 각 장르 내부에서 어떤 영화가 전체 관객 동원을 주도했는지 직관적인 면적 크기를 통해 비교할 수 있습니다."
 )

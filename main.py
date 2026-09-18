@@ -420,19 +420,6 @@ else:
         st.warning("⚠️ 캘린더 히트맵 출력을 위해 Plotly 라이브러리가 필요합니다.")
 
 
-import pandas as pd
-import plotly.express as px
-import streamlit as st
-
-# 페이지 기본 설정
-st.set_page_config(
-    page_title="영화 데이터 그래프 도감 2 - 분포와 관계",
-    page_icon="🎬",
-    layout="wide",
-)
-
-
-# 데이터 로드 및 전처리 함수
 @st.cache_data
 def load_data():
     url = "https://raw.githubusercontent.com/greatsong/modudata/main/data/kobis_movies.csv"
@@ -443,55 +430,7 @@ def load_data():
         df["openDt"].astype(str), format="%Y%m%d", errors="coerce"
     )
 
-    # 장르(genre)가 여러 개(예: '액션|드라마')인 경우 첫 번째 장르만 추출
-    df["genre"] = (
-        df["genre"].astype(str).apply(lambda x: x.split("|")[0] if x else x)
-    )
+    # 수정된 부분: .str 접근자를 활용하여 첫 번째 장르만 안전하게 추출
+    df["genre"] = df["genre"].fillna("미정").astype(str).str.split("|").str[0]
 
     return df
-
-
-# 데이터 불러오기
-df = load_data()
-
-# 앱 메인 타이틀
-st.title("🎬 영화 데이터 그래프 도감 2 - 분포와 관계")
-st.markdown("---")
-
-
-# -------------------------------------------------------------------
-# 그래프 1: 장르별 영화 편수 (도넛 차트)
-# -------------------------------------------------------------------
-st.header("1. 장르별 영화 편수 분포")
-
-# 장르별 영화 편수 집계
-genre_counts = (
-    df["genre"].value_counts().reset_index(name="편수").rename(columns={"index": "장르"})
-)
-
-# Plotly 도넛 차트 생성
-fig1 = px.pie(
-    genre_counts,
-    names="장르",
-    values="편수",
-    title="장르별 영화 편수 비율",
-    hole=0.4,  # 도넛 형태 지정
-)
-
-# 마우스 호버 시 편수 및 비율 표기 지정
-fig1.update_traces(
-    hovertemplate="<b>장르: %{label}</b><br>영화 편수: %{value}편<br>비율: %{percent}<extra></extra>",
-    textinfo="percent+label",
-)
-
-fig1.update_layout(hovermode="closest")
-
-# Streamlit 화면에 차트 출력
-st.plotly_chart(fig1, use_container_width=True)
-
-# '이 그래프로 알 수 있는 것' 안내 섹션
-st.info(
-    "💡 **이 그래프로 알 수 있는 것:** 최근 1년간 박스오피스 상위권에 들어간 주요 영화들의 장르별 편수 비중을 파악하여, 어떤 장르가 시장을 주도하고 있는지 한눈에 확인할 수 있습니다."
-)
-
-st.markdown("---")

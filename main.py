@@ -253,7 +253,8 @@ fig8 = px.sunburst(
 )
 
 fig8.update_traces(
-    hovertemplate="<b>%{label}</b><br>개봉일 스크린 수: %{value:,}개<extra></extra>"
+    textinfo="label+value",
+    hovertemplate="<b>%{label}</b><br>개봉일 스크린 수: %{value:,}개<extra></extra>",
 )
 
 st.plotly_chart(fig8, use_container_width=True)

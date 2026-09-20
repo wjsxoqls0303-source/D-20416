@@ -244,6 +244,28 @@ st.markdown("---")
 
 st.header("8. 국가별 제작한 영화의 우리나라 스크린수는 얼마나 차지하는가")
 
+# 개별 영화 스크린 수 조회용 선택 박스
+movie_list = sorted(df["movieNm"].dropna().unique())
+selected_movie = st.selectbox(
+    "🔍 개봉일 스크린 수를 조회할 영화를 선택하거나 직접 입력하세요:", movie_list
+)
+
+if selected_movie:
+    movie_info = df[df["movieNm"] == selected_movie].iloc[0]
+    scrn_cnt = movie_info["first_scrn"]
+    nat_info = movie_info["nation"]
+
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric(
+            label=f"🎬 '{selected_movie}' 개봉일 스크린 수",
+            value=f"{scrn_cnt:,} 개",
+        )
+    with col2:
+        st.metric(label="🌍 제작 국가", value=nat_info)
+
+st.write("")
+
 fig8 = px.sunburst(
     df,
     path=["nation", "movieNm"],

@@ -241,3 +241,25 @@ st.info(
 )
 
 st.markdown("---")
+
+st.header("8. 국가별로 제작한 영화의 스크린수는 얼마나 차지하는가")
+
+fig8 = px.sunburst(
+    df,
+    path=["nation", "movieNm"],
+    values="first_scrn",
+    title="국가별로 제작한 영화의 스크린수는 얼마나 차지하는가",
+    color="nation",
+)
+
+fig8.update_traces(
+    hovertemplate="<b>%{label}</b><br>개봉일 스크린 수: %{value:,}개<extra></extra>"
+)
+
+st.plotly_chart(fig8, use_container_width=True)
+
+st.info(
+    "💡 **이 그래프로 알 수 있는 것:** 제작 국가별 초기 스크린 점유 비중과 함께, 각 국가 내에서 어떤 개별 영화가 개봉일 스크린을 집중 점유했는지 직관적으로 확인할 수 있습니다."
+)
+
+st.markdown("---")

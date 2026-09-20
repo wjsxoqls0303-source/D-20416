@@ -244,7 +244,7 @@ st.markdown("---")
 
 st.header("8. 국가별 제작한 영화의 우리나라 스크린수는 얼마나 차지하는가")
 
-# 상단: 선버스트 그래프
+# 1. 상단: 선버스트 그래프
 fig8 = px.sunburst(
     df,
     path=["nation", "movieNm"],
@@ -264,23 +264,21 @@ st.info(
     "💡 **이 그래프로 알 수 있는 것:** 국내 개봉 시장에서 국가별 전체 스크린 확보 비중과 함께, 각 국가 내 개별 영화가 점유한 스크린 수를 선버스트 계층 구조로 명확히 파악할 수 있습니다."
 )
 
-# 하단: 개별 영화 스크린 수 조회 섹션
-st.subheader("🔍 개별 영화 스크린 수 조회")
+# 2. 하단: 영화 선택 검색 및 스크린 수/제작국가 정보 표시
+st.subheader("🎬 개별 영화 스크린 수 및 제작 국가 조회")
 
 movie_list = sorted(df["movieNm"].dropna().unique())
-selected_movie = st.selectbox(
-    "개봉일 스크린 수를 확인하고 싶은 영화를 선택하세요:",
-    movie_list,
-)
+selected_movie = st.selectbox("정보를 확인할 영화를 선택하세요:", movie_list)
 
 if selected_movie:
-    movie_row = df[df["movieNm"] == selected_movie].iloc[0]
-    scrn_count = int(movie_row["first_scrn"])
-    nation_info = movie_row["nation"]
+    movie_info = df[df["movieNm"] == selected_movie].iloc[0]
 
-    st.metric(
-        label=f"🎬 '{selected_movie}' ({nation_info}) 개봉일 스크린 수",
-        value=f"{scrn_count:,} 개",
-    )
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric(label="제작 국가", value=str(movie_info["nation"]))
+    with col2:
+        st.metric(
+            label="개봉일 스크린 수", value=f"{int(movie_info['first_scrn']):,}개"
+        )
 
 st.markdown("---")

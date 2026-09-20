@@ -18,6 +18,7 @@ def load_data():
         df["openDt"].astype(str), format="%Y%m%d", errors="coerce"
     )
     df["genre"] = df["genre"].fillna("미정").astype(str).str.split("|").str[0]
+    df["nation"] = df["nation"].fillna("기타")
 
     return df
 
@@ -216,6 +217,27 @@ st.plotly_chart(fig6, use_container_width=True)
 
 st.info(
     "💡 **이 그래프로 알 수 있는 것:** 개봉일 스크린 수가 많을수록 개봉 첫 주 관객 수(버블 크기)와 최종 총 관객 수가 모두 증가하며, 초기 흥행(첫 주 성적)이 최종 실적으로 직결되는 패턴을 다차원적으로 파악할 수 있습니다."
+)
+
+st.markdown("---")
+
+st.header("7. 제작 국가 및 장르별 영화 편수 분포 (선버스트)")
+
+fig7 = px.sunburst(
+    df,
+    path=["nation", "genre"],
+    title="제작 국가 ➔ 장르별 영화 편수 비중",
+    color="nation",
+)
+
+fig7.update_traces(
+    hovertemplate="<b>%{label}</b><br>영화 편수: %{value}편<extra></extra>"
+)
+
+st.plotly_chart(fig7, use_container_width=True)
+
+st.info(
+    "💡 **이 그래프로 알 수 있는 것:** 주요 제작 국가별로 공급된 영화들의 다양성 및 각 국가가 집중 생산하는 주력 장르의 분포 구성을 계층적으로 파악할 수 있습니다."
 )
 
 st.markdown("---")

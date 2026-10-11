@@ -1,6 +1,6 @@
 import pandas as pd
 import plotly.express as px
-import streamlit as st
+import streamlit as st 
 
 st.set_page_config(
     page_title="영화 데이터 그래프 도감 2 - 분포와 관계",

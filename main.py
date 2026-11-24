@@ -1,284 +1,192 @@
-import pandas as pd
-import plotly.express as px
 import streamlit as st
+import pandas as pd
+import numpy as np
+import joblib
+import plotly.express as px
+import plotly.graph_objects as go
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+from sklearn.linear_model import Ridge
+from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
 
 st.set_page_config(
-    page_title="영화 데이터 그래프 도감 2 - 분포와 관계",
-    page_icon="🎬",
-    layout="wide",
+    page_title="다이아몬드 가격 예측 AI",
+    page_icon="💎",
+    layout="wide"
 )
 
+# 데이터 로드 및 모델 학습/캐싱
+@st.cache_resource
+def load_data_and_model():
+    df = pd.read_csv("diamonds_cleaned_step3.csv")
+    
+    df_fe = df.copy()
+    df_fe["log_carat"] = np.log(df_fe["carat"])
+    df_fe["volume"] = df_fe["x"] * df_fe["y"] * df_fe["z"]
+    df_fe["log_volume"] = np.log(df_fe["volume"])
+    df_fe["xy_ratio"] = df_fe["x"] / df_fe["y"]
 
-@st.cache_data
-def load_data():
-    url = "https://raw.githubusercontent.com/greatsong/modudata/main/data/kobis_movies.csv"
-    df = pd.read_csv(url)
+    carat_bins = pd.qcut(df_fe["carat"], q=10, labels=False)
+    X = df_fe.drop(columns=["price"])
+    y = df_fe["price"].values
 
-    df["openDt"] = pd.to_datetime(
-        df["openDt"].astype(str), format="%Y%m%d", errors="coerce"
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=42, stratify=carat_bins
     )
-    df["genre"] = df["genre"].fillna("미정").astype(str).str.split("|").str[0]
-    df["nation"] = df["nation"].fillna("기타")
 
-    return df
+    num_cols = ["carat", "log_carat", "depth", "table", "x", "y", "z", "log_volume", "xy_ratio"]
+    cat_cols = ["cut", "color", "clarity"]
 
+    preprocessor = ColumnTransformer([
+        ("num", StandardScaler(), num_cols),
+        ("cat", OneHotEncoder(drop="first", sparse_output=False), cat_cols)
+    ])
 
-df = load_data()
+    model = Pipeline([
+        ("preprocessor", preprocessor),
+        ("regressor", Ridge(alpha=1.0))
+    ])
 
-st.title("🎬 영화 데이터 그래프 도감 2 - 분포와 관계")
-st.markdown("---")
+    model.fit(X_train[num_cols + cat_cols], np.log(y_train))
+    y_pred = np.exp(model.predict(X_test[num_cols + cat_cols]))
 
-st.header("1. 장르별 영화 편수 분포")
+    metrics = {
+        "r2": r2_score(y_test, y_pred),
+        "rmse": np.sqrt(mean_squared_error(y_test, y_pred)),
+        "mae": mean_absolute_error(y_test, y_pred),
+        "mape": np.mean(np.abs((y_test - y_pred) / y_test)) * 100
+    }
+    return df, model, num_cols, cat_cols, metrics, y_test, y_pred
 
-genre_counts = df["genre"].value_counts().reset_index()
-genre_counts.columns = ["장르", "편수"]
+df, model, num_cols, cat_cols, metrics, y_test, y_pred = load_data_and_model()
 
-fig1 = px.pie(
-    genre_counts,
-    names="장르",
-    values="편수",
-    title="장르별 영화 편수 비율",
-    hole=0.4,
-)
+# 사이드바: 다이아몬드 스펙 입력
+st.sidebar.header("💎 다이아몬드 스펙 입력")
 
-fig1.update_traces(
-    hovertemplate="<b>장르: %{label}</b><br>영화 편수: %{value}편<br>비율: %{percent}<extra></extra>",
-    textinfo="percent+label",
-)
+carat = st.sidebar.slider("Carat (중량, ct)", min_value=0.20, max_value=5.01, value=1.00, step=0.01)
+cut = st.sidebar.selectbox("Cut (커팅 등급)", ["Ideal", "Premium", "Very Good", "Good", "Fair"], index=0)
+color = st.sidebar.selectbox("Color (색상, D가 최고)", ["D", "E", "F", "G", "H", "I", "J"], index=2)
+clarity = st.sidebar.selectbox("Clarity (투명도, IF가 최고)", ["IF", "VVS1", "VVS2", "VS1", "VS2", "SI1", "SI2", "I1"], index=3)
 
-fig1.update_layout(hovermode="closest")
+st.sidebar.markdown("---")
+st.sidebar.subheader("📐 물리적 치수 및 비율")
 
-st.plotly_chart(fig1, use_container_width=True)
+# 캐럿에 비례한 기본 치수 자동 제안
+est_diameter = round(6.45 * (carat ** (1/3)), 2)
+est_z = round(est_diameter * 0.618, 2)
 
-st.info(
-    "💡 **이 그래프로 알 수 있는 것:** 최근 1년간 박스오피스 상위권에 들어간 주요 영화들의 장르별 편수 비중을 파악하여, 어떤 장르가 시장을 주도하고 있는지 한눈에 확인할 수 있습니다."
-)
+x = st.sidebar.number_input("x (길이, mm)", min_value=3.50, max_value=11.00, value=est_diameter, step=0.01)
+y = st.sidebar.number_input("y (너비, mm)", min_value=3.50, max_value=11.00, value=est_diameter, step=0.01)
+z = st.sidebar.number_input("z (깊이, mm)", min_value=2.00, max_value=7.50, value=est_z, step=0.01)
 
-st.markdown("---")
+calc_depth = round(2 * z / (x + y) * 100, 1)
+depth = st.sidebar.slider("Depth (%)", min_value=50.0, max_value=79.0, value=float(np.clip(calc_depth, 50.0, 79.0)), step=0.1)
+table = st.sidebar.slider("Table (%)", min_value=43.0, max_value=79.0, value=57.0, step=0.1)
 
-st.header("2. 장르 및 영화별 총 관객 수 분포 (트리맵)")
+# 메인 타이틀
+st.title("💎 다이아몬드 가격 예측 웹 애플리케이션")
+st.markdown("정제된 **53,558건**의 다이아몬드 데이터와 **로그 변환 Ridge 선형회귀 모델**을 기반으로 시장 가치를 예측합니다.")
 
-fig2 = px.treemap(
-    df,
-    path=[px.Constant("전체 영화"), "genre", "movieNm"],
-    values="total_audi",
-    title="장르 및 영화별 총 관객 수 비중",
-    color="genre",
-)
+# 입력 데이터 구성 및 예측
+input_df = pd.DataFrame([{
+    "carat": carat,
+    "log_carat": np.log(carat),
+    "depth": depth,
+    "table": table,
+    "x": x,
+    "y": y,
+    "z": z,
+    "log_volume": np.log(x * y * z),
+    "xy_ratio": x / y,
+    "cut": cut,
+    "color": color,
+    "clarity": clarity
+}])
 
-fig2.update_traces(
-    hovertemplate="<b>%{label}</b><br>총 관객 수: %{value:,}명<extra></extra>"
-)
+predicted_price = float(np.exp(model.predict(input_df[num_cols + cat_cols])[0]))
+price_per_carat = predicted_price / carat
 
-st.plotly_chart(fig2, use_container_width=True)
+# 유사 스펙 실제 거래가 조회
+similar_df = df[
+    (df["carat"].between(carat - 0.05, carat + 0.05)) &
+    (df["cut"] == cut) &
+    (df["color"] == color) &
+    (df["clarity"] == clarity)
+]
 
-st.info(
-    "💡 **이 그래프로 알 수 있는 것:** 각 장르 내부에서 어떤 영화가 전체 관객 동원을 주도했는지 직관적인 면적 크기를 통해 비교할 수 있습니다."
-)
-
-st.markdown("---")
-
-st.header("3. 총 관객 수 분포 (히스토그램)")
-
-fig3 = px.histogram(
-    df,
-    x="total_audi",
-    nbins=30,
-    title="영화별 총 관객 수 분포",
-    labels={"total_audi": "총 관객 수(명)", "count": "영화 수"},
-    color_discrete_sequence=["#3366CC"],
-)
-
-fig3.update_traces(
-    hovertemplate="관객 수 구간: %{x}<br>영화 수: %{y}편<extra></extra>"
-)
-
-fig3.update_layout(
-    xaxis_title="총 관객 수(명)",
-    yaxis_title="영화 수(편)",
-    bargap=0.1,
-)
-
-st.plotly_chart(fig3, use_container_width=True)
-
-max_movie = df.loc[df["total_audi"].idxmax()]
-max_movie_name = max_movie["movieNm"]
-max_movie_audi = max_movie["total_audi"]
-
-under_1M_count = (df["total_audi"] <= 1_000_000).sum()
-under_1M_ratio = (under_1M_count / len(df)) * 100
-
-st.info(
-    f"💡 **이 그래프로 알 수 있는 것:** 대부분의 영화({under_1M_ratio:.1f}%)가 관객 수 **100만 명 이하 구간**에 밀집해 있는 반면, 가장 많은 관객을 모은 영화는 **'{max_movie_name}'**({max_movie_audi:,}명)으로 흥행 편차가 매우 큼을 알 수 있습니다."
-)
+# 상단 KPI 카드
+col1, col2, col3, col4 = st.columns(4)
+col1.metric("예측 시장 가격 (USD)", f"${predicted_price:,.2f}")
+col2.metric("캐럿당 단가 (USD/ct)", f"${price_per_carat:,.2f}")
+if len(similar_df) > 0:
+    avg_sim = similar_df["price"].mean()
+    diff_pct = (predicted_price - avg_sim) / avg_sim * 100
+    col3.metric("동일 등급 실거래 평균가", f"${avg_sim:,.2f}", f"{diff_pct:+.1f}% (표본 {len(similar_df)}건)")
+else:
+    col3.metric("동일 등급 실거래 평균가", "유사 표본 없음")
+col4.metric("모델 결정계수 (R²)", f"{metrics['r2']:.4f}", f"MAPE {metrics['mape']:.2f}%")
 
 st.markdown("---")
 
-st.header("4. 개봉일 스크린 수와 총 관객 수의 관계 (산점도)")
+# 탭 구성
+tab1, tab2, tab3 = st.tabs(["📊 시장 분포 내 위치 분석", "🔍 유사 등급 실거래 데이터", "📈 모델 성능 및 검증"])
 
-fig4 = px.scatter(
-    df,
-    x="first_scrn",
-    y="total_audi",
-    color="genre",
-    hover_name="movieNm",
-    title="개봉일 스크린 수 vs 총 관객 수",
-    labels={
-        "first_scrn": "개봉일 스크린 수(개)",
-        "total_audi": "총 관객 수(명)",
-        "genre": "장르",
-    },
-)
-
-fig4.update_traces(
-    hovertemplate="<b>%{hovertext}</b><br>개봉일 스크린 수: %{x:,}개<br>총 관객 수: %{y:,}명<extra></extra>"
-)
-
-fig4.update_layout(
-    xaxis_title="개봉일 스크린 수(개)",
-    yaxis_title="총 관객 수(명)",
-)
-
-st.plotly_chart(fig4, use_container_width=True)
-
-st.info(
-    "💡 **이 그래프로 알 수 있는 것:** 개봉일 스크린 수가 많을수록 대체로 총 관객 수가 증가하는 양의 상관관계를 보이며, 초기 상영관 확보(스크린 수)가 최종 흥행 성과에 결정적인 영향을 미침을 알 수 있습니다."
-)
-
-st.markdown("---")
-
-st.header("5. 주요 장르별 총 관객 수 분포 (박스플롯)")
-
-genre_counts_series = df["genre"].value_counts()
-major_genres = genre_counts_series[genre_counts_series >= 10].index
-df_major_genres = df[df["genre"].isin(major_genres)]
-
-fig5 = px.box(
-    df_major_genres,
-    x="genre",
-    y="total_audi",
-    color="genre",
-    hover_name="movieNm",
-    points="outliers",
-    title="영화 10편 이상 장르별 총 관객 수 분포 및 이상치",
-    labels={
-        "genre": "장르",
-        "total_audi": "총 관객 수(명)",
-    },
-)
-
-fig5.update_traces(
-    hovertemplate="<b>%{hovertext}</b><br>장르: %{x}<br>관객 수: %{y:,}명<extra></extra>"
-)
-
-fig5.update_layout(
-    xaxis_title="장르",
-    yaxis_title="총 관객 수(명)",
-    showlegend=False,
-)
-
-st.plotly_chart(fig5, use_container_width=True)
-
-st.info(
-    "💡 **이 그래프로 알 수 있는 것:** 주요 장르별 관객 수의 중앙값과 범위를 비교할 수 있으며, 박스 밖으로 튀어나온 이상치(Outlier) 점들을 통해 장르의 평균적인 흥행 규모를 뛰어넘은 '대박 흥행작'들을 식별할 수 있습니다."
-)
-
-st.markdown("---")
-
-st.header("6. 스크린 수, 총 관객 수, 개봉 첫 주 관객 수의 관계 (버블 차트)")
-
-fig6 = px.scatter(
-    df,
-    x="first_scrn",
-    y="total_audi",
-    size="first_week_audi",
-    color="genre",
-    hover_name="movieNm",
-    size_max=50,
-    title="개봉일 스크린 수 vs 총 관객 수 (버블 크기: 개봉 첫 주 관객 수)",
-    labels={
-        "first_scrn": "개봉일 스크린 수(개)",
-        "total_audi": "총 관객 수(명)",
-        "first_week_audi": "개봉 첫 주 관객 수(명)",
-        "genre": "장르",
-    },
-)
-
-fig6.update_traces(
-    hovertemplate="<b>%{hovertext}</b><br>개봉일 스크린 수: %{x:,}개<br>총 관객 수: %{y:,}명<br>개봉 첫 주 관객 수: %{marker.size:,}명<extra></extra>"
-)
-
-fig6.update_layout(
-    xaxis_title="개봉일 스크린 수(개)",
-    yaxis_title="총 관객 수(명)",
-)
-
-st.plotly_chart(fig6, use_container_width=True)
-
-st.info(
-    "💡 **이 그래프로 알 수 있는 것:** 개봉일 스크린 수가 많을수록 개봉 첫 주 관객 수(버블 크기)와 최종 총 관객 수가 모두 증가하며, 초기 흥행(첫 주 성적)이 최종 실적으로 직결되는 패턴을 다차원적으로 파악할 수 있습니다."
-)
-
-st.markdown("---")
-
-st.header("7. 제작 국가 및 장르별 영화 편수 분포 (선버스트)")
-
-fig7 = px.sunburst(
-    df,
-    path=["nation", "genre"],
-    title="제작 국가 ➔ 장르별 영화 편수 비중",
-    color="nation",
-)
-
-fig7.update_traces(
-    hovertemplate="<b>%{label}</b><br>영화 편수: %{value}편<extra></extra>"
-)
-
-st.plotly_chart(fig7, use_container_width=True)
-
-st.info(
-    "💡 **이 그래프로 알 수 있는 것:** 주요 제작 국가별로 공급된 영화들의 다양성 및 각 국가가 집중 생산하는 주력 장르의 분포 구성을 계층적으로 파악할 수 있습니다."
-)
-
-st.markdown("---")
-
-st.header("8. 국가별 제작한 영화의 우리나라 스크린수는 얼마나 차지하는가")
-
-# 1. 상단: 선버스트 그래프
-fig8 = px.sunburst(
-    df,
-    path=["nation", "movieNm"],
-    values="first_scrn",
-    title="국가별 제작한 영화의 우리나라 스크린수는 얼마나 차지하는가",
-    color="nation",
-)
-
-fig8.update_traces(
-    textinfo="label+value",
-    hovertemplate="<b>%{label}</b><br>개봉일 스크린 수: %{value:,}개<extra></extra>",
-)
-
-st.plotly_chart(fig8, use_container_width=True)
-
-st.info(
-    "💡 **이 그래프로 알 수 있는 것:** 국내 개봉 시장에서 국가별 전체 스크린 확보 비중과 함께, 각 국가 내 개별 영화가 점유한 스크린 수를 선버스트 계층 구조로 명확히 파악할 수 있습니다."
-)
-
-# 2. 하단: 영화 선택 검색 및 스크린 수/제작국가 정보 표시
-st.subheader("🎬 개별 영화 스크린 수 및 제작 국가 조회")
-
-movie_list = sorted(df["movieNm"].dropna().unique())
-selected_movie = st.selectbox("정보를 확인할 영화를 선택하세요:", movie_list)
-
-if selected_movie:
-    movie_info = df[df["movieNm"] == selected_movie].iloc[0]
-
-    col1, col2 = st.columns(2)
-    with col1:
-        st.metric(label="제작 국가", value=str(movie_info["nation"]))
-    with col2:
-        st.metric(
-            label="개봉일 스크린 수", value=f"{int(movie_info['first_scrn']):,}개"
+with tab1:
+    c1, c2 = st.columns(2)
+    with c1:
+        sample_df = df.sample(3000, random_state=42)
+        fig_scatter = px.scatter(
+            sample_df, x="carat", y="price", color="clarity",
+            opacity=0.45, title="캐럿(Carat) 대비 가격 분포 및 현재 예측 위치",
+            labels={"carat": "Carat (ct)", "price": "Price (USD)", "clarity": "Clarity"}
         )
+        fig_scatter.add_trace(go.Scatter(
+            x=[carat], y=[predicted_price],
+            mode="markers+text",
+            marker=dict(size=16, color="red", symbol="star", line=dict(width=2, color="black")),
+            text=["예측 위치"], textposition="top center",
+            name="현재 입력 다이아몬드"
+        ))
+        st.plotly_chart(fig_scatter, use_container_width=True)
 
-st.markdown("---")
+    with c2:
+        # 동일 캐럿대(±0.1ct) 등급별 가격 비교
+        band_df = df[df["carat"].between(max(0.2, carat - 0.1), carat + 0.1)]
+        if len(band_df) > 10:
+            fig_box = px.box(
+                band_df, x="clarity", y="price",
+                category_orders={"clarity": ["I1", "SI2", "SI1", "VS2", "VS1", "VVS2", "VVS1", "IF"]},
+                title=f"유사 중량({max(0.2, carat-0.1):.2f}~{carat+0.1:.2f}ct) 투명도별 가격 분포",
+                labels={"clarity": "Clarity", "price": "Price (USD)"}
+            )
+            fig_box.add_hline(y=predicted_price, line_dash="dash", line_color="red", annotation_text="예측가")
+            st.plotly_chart(fig_box, use_container_width=True)
+        else:
+            st.info("해당 중량 구간의 비교 표본이 충분하지 않습니다.")
+
+with tab2:
+    st.subheader(f"동일 4C 조건 ({carat-0.05:.2f}~{carat+0.05:.2f}ct / {cut} / {color} / {clarity}) 실거래 내역")
+    if len(similar_df) > 0:
+        st.dataframe(similar_df.sort_values(by="price").reset_index(drop=True), use_container_width=True)
+    else:
+        st.warning("정확히 일치하는 4C 표본이 없습니다. 사이드바에서 조건을 조정해 보세요.")
+
+with tab3:
+    st.subheader("최종 로그 선형회귀(Ridge) 모델 검증 성능 (Test Set: 10,712건)")
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("R² Score", f"{metrics['r2']:.4f}")
+    m2.metric("RMSE", f"${metrics['rmse']:.2f}")
+    m3.metric("MAE", f"${metrics['mae']:.2f}")
+    m4.metric("MAPE", f"{metrics['mape']:.2f}%")
+
+    eval_sample = pd.DataFrame({"Actual": y_test, "Predicted": y_pred}).sample(2000, random_state=42)
+    fig_eval = px.scatter(
+        eval_sample, x="Actual", y="Predicted", opacity=0.4,
+        title="실제 가격(Actual) vs 예측 가격(Predicted)",
+        labels={"Actual": "실제 가격 (USD)", "Predicted": "예측 가격 (USD)"}
+    )
+    fig_eval.add_shape(type="line", x0=0, y0=0, x1=19000, y1=19000, line=dict(color="red", dash="dash"))
+    st.plotly_chart(fig_eval, use_container_width=True)
+
